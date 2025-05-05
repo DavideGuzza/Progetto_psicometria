@@ -1,0 +1,318 @@
+---
+title: "Lavoro di Gruppo 2 - Analisi di dati ERP"
+format: html
+editor: visual
+---
+
+# Dataset
+
+Questo lavoro di gruppo richiede di effettuare l’analisi di un dataset ERP.
+
+Il dataset è parte di ERPcore, e consiste in un esperimento con 40 partecipanti esposti alla visione passiva di quattro tipologie di stimoli:
+
+-   Volti
+-   Volti scrambled
+-   Automobili
+-   Automobili scrambled Questo tipo di paradigma è tipicamente usato per studiare i processi corticali sottostanti l’elaborazione di volti, e si associano ad uno specifico potenziale evento-relato, la N170.
+
+```{r}
+#| include: false
+library(tidyverse)
+```
+
+```{r}
+#| echo: false
+library(tidyverse)
+
+erp_load <- function(path) {
+  filenames <- list.files(path = path, full.names = TRUE)  
+  lista_dati <- vector("list", length(filenames))  
+  
+  for (i in seq_along(filenames)) {
+    tempdata <- read.table(filenames[i], header = TRUE) 
+    
+    temp_long <- tempdata %>%
+      pivot_longer(cols = -time, names_to = "channel", values_to = "value") %>%
+      mutate(
+        id = ceiling(i / 4),  
+        condition = c("Cars", "Faces", "ScrambledCars", "ScrambledFaces")[(i - 1) %% 4 + 1]  
+      )
+    
+    lista_dati[[i]] <- temp_long  # Salva il tibble trasformato
+    }
+  
+  df_finale <- bind_rows(lista_dati)  # Combina tutti i dati
+  return(df_finale)
+  rm(lista_dati)
+}
+
+dati <- erp_load("C:/Users/david/Downloads/ERPDataforstudents")
+head(dati)
+```
+
+### Analisi descrittiva
+
+```{r}
+#| echo: false
+dati <- dati %>% 
+  filter(condition %in% c("Faces", "ScrambledFaces")) 
+plot_mean_values  <- function(data, channels_selected, conditions_selected) {
+  data_filtered <- data %>%
+    filter(channel %in% channels_selected, condition %in% conditions_selected) %>%
+    group_by(time, channel, condition) %>% 
+    summarise(
+      mean_value = mean(value, na.rm = TRUE),  
+      sem_value = sd(value, na.rm = TRUE) / sqrt(n()) 
+    )  
+
+  if (nrow(data_filtered) == 0) {
+    message("Nessun dato trovato per i canali: ", paste(channels_selected, collapse = ", "), 
+            " e le condizioni: ", paste(conditions_selected, collapse = ", "))
+    return(NULL)
+    }
+
+  ggplot(data_filtered, aes(x = time, y = mean_value, color = condition, fill = condition)) +
+    geom_line(linewidth = 1) + 
+        geom_ribbon(aes(ymin = mean_value - sem_value, ymax = mean_value + sem_value), alpha = 0.2) + 
+    facet_wrap(~ channel, scales = "free_y") +  
+    labs(
+      x = "Tempo",
+      y = "Valore Medio",
+      color = "Condizione",
+      fill = "Condizione"
+    ) +
+    theme_minimal() +  
+    theme(
+      plot.title = element_text(hjust = 0.5, face = "bold"), 
+      legend.position = "bottomleft"
+    )
+}
+
+all_channels <- c("C3","C4","C5","C6","CPz","Cz","F3","F4","F7","F8","FC3","FC4","FCz","FP1","FP2","Fz","O1","O2","Oz","P3","P4","P7","P8","PO3","PO4","PO7","PO8","Pz")
+plot_mean_values(dati, all_channels,c("Faces","ScrambledFaces"))
+```
+
+Figura 1:
+
+```{r}
+#| echo: false
+plot_mean_values(dati, c("F4","FC4", "F8"),c("Faces","ScrambledFaces"))
+```
+
+Figura 2:
+
+```{r}
+#| echo: false
+plot_mean_values(dati, c("F3", "FC3", "F7"),c("Faces","ScrambledFaces"))
+```
+
+Figura 3:
+
+```{r}
+#| echo: false
+plot_mean_values(dati, c("PO8", "P8", "PO4"),c("Faces","ScrambledFaces"))
+```
+
+Figura 4:
+
+```{r}
+#| echo: false
+plot_mean_values(dati, c("PO7", "P7", "PO3"),c("Faces","ScrambledFaces"))
+```
+
+Figura 5:
+
+```{r}
+#| echo: false
+dati_n170 <- dati %>%
+  filter(time >= 150, time <= 190, channel %in% all_channels) %>%
+  group_by(channel, condition) %>%
+  summarise(
+    mean_amp = mean(value, na.rm = TRUE),
+    sd_amp = sd(value, na.rm = TRUE),
+    n = n(),
+    sem_amp = sd_amp / sqrt(n),
+    .groups = "drop"
+  )
+plot_n170_summary <- function(data) {
+  ggplot(data, aes(x = channel, y = mean_amp, color = condition)) +
+    geom_point(size = 1.5, position = position_dodge(width = 0.5)) +
+    geom_errorbar(
+      aes(
+        ymin = mean_amp - 1.96 * sem_amp,
+        ymax = mean_amp + 1.96 * sem_amp
+      ),
+      width = 1,
+      position = position_dodge(width = 0.5)
+    ) +
+    geom_hline(yintercept = 0, linetype = "dashed", alpha = 0.5) +
+    labs(
+      x = "Elettrodo",
+      y = "Ampiezza Media (μV)",
+      color = "Condizione",
+    ) +
+    scale_color_manual(values = c("Faces" = "#F8766D", "ScrambledFaces" = "#00BFC4")) +
+    theme_minimal() +
+    theme(
+      axis.text.x = element_text(angle = 45, hjust = 1),
+      legend.position = "top",
+      panel.grid.major.x = element_blank()
+    ) +
+    coord_flip()
+}
+plot_n170_summary(dati_n170)
+```
+
+Figura 6:
+
+# Analisi statistica
+
+```{r}
+#| echo: false
+library(lme4)
+dati_CAD <- dati %>% 
+  filter(time >= 150, time <= 190,channel %in% c("F4","FC4","F8")) 
+dati_CAS <- dati %>% 
+  filter(time >= 150, time <= 190,channel %in% c("F3", "FC3", "F7"))
+dati_CPD <- dati %>% 
+  filter(time >= 150, time <= 190,channel %in% c("PO8", "P8", "PO4"))
+dati_CPS <- dati %>% 
+  filter(time >= 150, time <= 190,channel %in% c("PO7", "P7", "PO3"))
+mCAD <- lmer(value~condition + (1 | id),data=dati_CAD)
+mCAD <- lmer(value ~ condition + (1 | id) + (1 | channel), data = dati_CAD)
+mCAD <- lmer(value ~ condition * channel + (1 | id), data = dati_CAD)
+library(emmeans)
+emmeans(mCAD, ~ condition | channel) %>%
+  plot(comparisons = TRUE) +
+  ggtitle("Stima marginale per condizione e canale (Cluster CAD)")
+mCAD <- lmer(value ~ condition * channel + (1 | id), data = dati_CAD)
+mCAS <- lmer(value~condition + (1 | id),data=dati_CAS)
+mCPD <- lmer(value~condition + (1 | id),data=dati_CPD)
+mCPS <- lmer(value~condition + (1 | id),data=dati_CPS)
+ggplot(dati_CAD, aes(x = condition, y = value, fill = condition)) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.5) +
+  geom_jitter(aes(color = id), width = 0.2, alpha = 0.3, size = 0.5, show.legend = FALSE) +
+  labs(
+    title = "Risposta media 150–190 ms - Cluster Anteriore Destro",
+    y = "Ampiezza (μV)",
+    x = "Condizione"
+  ) +
+  theme_minimal()
+```
+
+```{r}
+#| cache: true
+#| include: false
+library(tidyverse)
+
+# Filtra le condizioni di interesse e calcola le differenze
+diff_data <- dati %>%
+  filter(condition %in% c("Faces", "ScrambledFaces")) %>%
+  pivot_wider(
+    names_from = condition,
+    values_from = value,
+    names_prefix = "val_"
+  ) %>%
+  mutate(diff = val_Faces - val_ScrambledFaces)
+t_stats <- diff_data %>%
+  group_by(time, channel) %>%
+  summarise(
+    t_value = t.test(diff, mu = 0)$statistic,
+    .groups = "drop"
+  )
+alpha <- 0.05
+df <- n_distinct(diff_data$id) - 1  # Gradi di libertà
+threshold <- qt(1 - alpha/2, df)    # Valore critico t
+# Aggiungi una maschera per i valori significativi
+mask <- t_stats %>%
+  mutate(sig = abs(t_value) > threshold)
+
+# Identifica cluster temporali per ogni elettrodo
+clusters_original <- mask %>%
+  group_by(channel) %>%
+  mutate(
+    cluster_id = cumsum(sig != lag(sig, default = FALSE))
+  ) %>%
+  filter(sig) %>%
+  group_by(channel, cluster_id) %>%
+  summarise(
+    start_time = min(time),
+    end_time = max(time),
+    cluster_mass = sum(t_value),
+    .groups = "drop"
+  )
+n_perm <- 1000  # Numero di permutazioni
+max_cluster_masses <- numeric(n_perm)
+
+for (i in 1:n_perm) {
+  # Inverti casualmente il segno delle differenze (H0)
+  perm_sign <- sample(c(-1, 1), size = n_distinct(diff_data$id), replace = TRUE)
+  diff_perm <- diff_data %>%
+    group_by(id) %>%
+    mutate(diff = diff * perm_sign[cur_group_id()]) %>%
+    ungroup()
+  
+  # Calcola le t-statistiche permutate
+  t_perm <- diff_perm %>%
+    group_by(time, channel) %>%
+    summarise(t_value = t.test(diff)$statistic, .groups = "drop")
+  
+  # Trova cluster nelle statistiche permutate
+  mask_perm <- t_perm %>%
+    mutate(sig = abs(t_value) > threshold)
+  
+  clusters_perm <- mask_perm %>%
+    group_by(channel) %>%
+    mutate(
+      cluster_id = cumsum(sig != lag(sig, default = FALSE))
+    ) %>%
+    filter(sig) %>%
+    group_by(channel, cluster_id) %>%
+    summarise(
+      cluster_mass = sum(t_value),
+      .groups = "drop"
+    )
+  
+  # Registra il massimo cluster mass
+  max_cluster_masses[i] <- max(abs(clusters_perm$cluster_mass), na.rm = TRUE)
+}
+clusters_original <- clusters_original %>%
+  mutate(
+    p_value = map_dbl(
+      cluster_mass,
+      ~mean(max_cluster_masses >= abs(.x))
+    )
+  )
+
+# Filtra i cluster significativi (es. p < 0.05)
+sig_clusters <- clusters_original %>%
+  filter(p_value < 0.05)
+```
+
+```{r}
+#| echo: false
+ggplot(sig_clusters, aes(x = start_time, y = channel, color = cluster_mass)) +
+  geom_segment(aes(xend = end_time, yend = channel), size = 2) +
+  scale_color_gradient2(low = "blue", mid = "white", high = "red") +
+  labs(title = "Cluster significativi", x = "Time (ms)", y = "Electrode")
+```
+
+Figura :
+
+Elettrodi Coinvolti:
+
+-   Regioni Posteriori (PO7, PO8, O1, O2, P7, P8): Coerenti con l'elaborazione visiva dei volti, tipicamente associata alla componente N170 (che però è attesa \~170 ms). La significatività a partire da 200 ms potrebbe riflettere processi successivi (es. categorizzazione o memoria di lavoro visiva).
+-   Aree Centrali e Frontali (Cz, CPz, Fz, F3, F4): Suggeriscono un coinvolgimento di network attentivi o di integrazione multisensoriale, non limitati alle sole aree visive.
+-   Intervallo Temporale (200–800 ms): L’effetto si estende ben oltre la finestra classica della N170, indicando una differenza sostenuta tra volti e scrambled. Potrebbe corrispondere a:
+-   Elaborazione configurale (analisi olistica dei volti vs. stimoli caotici).
+-   Componenti tardive (es. N400 o LPP) legate a processi cognitivi superiori.
+
+Cluster Mass con Valori Positivi/Negativi:
+
+-   La variazione di polarità (-500 a +500) potrebbe indicare:
+-   Fasi distinte (es. negatività iniziale seguita da positività).
+-   Eterogeneità spaziale (alcuni elettrodi mostrano attivazione aumentata, altri soppressa).
+
+Robustezza Statistica:
+
+-   I cluster superano la correzione per confronti multipli via permutazioni, suggerendo che l’effetto non è dovuto al caso (FWER controllato).
