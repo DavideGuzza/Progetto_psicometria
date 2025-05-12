@@ -163,7 +163,7 @@ obs_df <- wide %>%
   )
 
 set.seed(1234)
-B <- 100
+B <- 1000
 ids <- unique(wide$id)
 channels <- unique(wide$channel)
 times <- unique(wide$time)
@@ -231,10 +231,13 @@ ggplot(sig_df, aes(x = time, y = channel, fill = sig)) +
     panel.grid = element_blank(),
     axis.text.y = element_text(size = 10),
     axis.text.x = element_text(size = 10, angle = 90),
-    plot.title = element_text(size = 14, face = "bold", hjust = 0.5)
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+    legend.position = "none"
   )
 
 ```
+
+
 ```{r}
 #| echo: false
 #| cache: true
@@ -303,10 +306,10 @@ for (perm in seq_len(n_perm)) {
   max_masses[perm] <- max(perm_mass$mass, na.rm = TRUE)
 }
 
-cluster_mass <- cluster_mass %>%
-  mutate(
-    p_cluster = mean(max_masses >= mass)
-  )
+cluster_mass$p_cluster <- sapply(
+  cluster_mass$mass,
+  function(m) mean(max_masses >= m)
+)
 sig_clusters <- cluster_mass %>%
   filter(p_cluster < .05) %>%
   select(channel, cluster_id, p_cluster)
@@ -341,10 +344,10 @@ abline(v=t_crit_001,col=2)
 raster_df <- combined_df %>%
   mutate(
     color = case_when(
-      t_obs > threshold ~ "white",
-      t_obs < threshold ~ "black",
-      TRUE                     ~ "red"
-    )
+      t_obs >  threshold & p_adj < 0.05 ~ "white",  # significant positive
+      t_obs < -threshold & p_adj < 0.05 ~ "black",  # significant negative
+      TRUE                              ~ "grey80"  # all else
+      )
   )%>%
   mutate(threshold_label = case_when(
     threshold == t_crit_05 ~ "Differences between ERPs to Targets and Standards (Maximum Cluster−Level Mass, t threshold = 2.02",
@@ -353,11 +356,55 @@ raster_df <- combined_df %>%
 ggplot(raster_df, aes(x = time, y = channel, fill = color)) +
   geom_tile(color = "black", size = 0.3) + 
   facet_wrap(~ threshold_label, ncol = 1) +
-  scale_fill_manual(values = c("white" = "white", "black" = "black", "red" = "red")) +
+  scale_fill_manual(values = c("white" = "white", "black" = "black", "grey80" = "grey80")) +
   labs(
     title = "",
     x = "Time (ms)", y = "Electrode"
   ) +
   theme_minimal() +
   theme(legend.position = "none")
+```
+
+```{r}
+# 1) Define the full grid of time & channel (for each threshold)
+#    Assume you know the full range and step of your 'time' variable:
+time_vals    <- unique(df$time)
+channel_vals <- unique(raster_df$channel)
+
+full_grid <- expand_grid(
+  threshold = unique(raster_df$threshold),
+  channel   = channel_vals,
+  time      = time_vals
+)
+
+# 2) Left-join your results onto that grid
+plot_df <- full_grid %>%
+  left_join(raster_df, by = c("threshold", "channel", "time"))
+
+# 3) Define colors so that ANY missing t_obs (i.e. NA) → gray
+plot_df <- plot_df %>%
+  mutate(
+    color = case_when(
+      t_obs >  threshold & p_adj < 0.05 ~ "white",  # significant positive
+      t_obs < -threshold & p_adj < 0.05 ~ "black",  # significant negative
+      TRUE                              ~ "grey80"  # all else
+    )
+  )%>%
+  mutate(threshold_label = case_when(
+    threshold == t_crit_05 ~ "Differences between ERPs to Targets and Standards (Maximum Cluster−Level Mass, t threshold = 2.02",
+    threshold == t_crit_001 ~ "Differences between ERPs to Targets and Standards (Maximum Cluster−Level Mass, t threshold = 3.56"
+  ))
+
+# 4) Plot with ggplot2
+ggplot(plot_df, aes(x = time, y = channel, fill = color)) +
+  geom_tile(color = "black", size = 0.3) + 
+  facet_wrap(~ threshold_label, ncol = 1) +
+  scale_fill_manual(values = c("white" = "white", "black" = "black", "grey80" = "grey80")) +
+  labs(
+    title = "",
+    x = "Time (ms)", y = "Electrode"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+
 ```
