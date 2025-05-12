@@ -165,6 +165,65 @@ plot_n170_summary(dati_n170)
 
 Figura 6:
 
+```{r}
+electrode_coords <- data.frame(
+  channel = c("FP1", "F3", "F7", "FC3", "C3", "C5", "P3", "P7", "PO7", "PO3", 
+                "O1", "Oz", "Pz", "CPz", "FP2", "Fz", "F4", "F8", "FC4", "FCz", 
+                "Cz", "C4", "C6", "P4", "P8", "PO8", "PO4", "O2"),
+  x = c(-0.23, -0.50, -0.71, -0.50, -0.71, -0.87, -0.50, -0.71, -0.38, -0.23, 
+        -0.13, 0.00, 0.00, 0.00, 0.23, 0.00, 0.50, 0.71, 0.50, 0.00, 
+        0.00, 0.71, 0.87, 0.50, 0.71, 0.38, 0.23, 0.13),
+  y = c(0.91, 0.85, 0.71, 0.45, 0.00, -0.23, -0.45, -0.71, -0.92, -0.91, 
+        -0.98, -1.00, -0.50, 0.00, 0.91, 0.85, 0.85, 0.71, 0.45, 0.53, 
+        0.00, 0.00, -0.23, -0.45, -0.71, -0.92, -0.91, -0.98)
+)
+# 1. Converti il tempo in secondi e definisci le epoche
+dati_epoched <- dati %>%
+  mutate(
+    time_sec = time / 1000,  # Converti ms -> secondi
+    epoch = paste(id, condition, sep = "_")  # Crea un ID unico per epoca
+  )
+
+# 2. Carica le coordinate degli elettrodi (supponendo che sia un dataframe con colonne: channel, x, y)
+# electrode_coords <- read.csv("electrode_coordinates.csv")  # Se le hai in un file CSV
+
+# 3. Unisci le coordinate al dataset EEG
+dati_epoched <- dati_epoched %>%
+  left_join(electrode_coords, by = "channel")
+
+# 4. Crea l'oggetto eeg_epochs
+eeg_data <- eeg_epochs(
+  data = dati_epoched,
+  srate = 1000,  # Frequenza di campionamento (adatta al tuo dato)
+  chan_info = "channel",
+  timings = c(-0.2, 0.8),  # Start e end delle epoche (in secondi)
+  events = data.frame(
+    event_time = 0,  # Tempo dell'evento (0 = inizio stimolo)
+    event_type = unique(dati_epoched$condition)
+  )
+)
+
+# 5. Filtra i dati per il tempo desiderato (200 ms)
+data_200ms <- eeg_data$signals %>%  # Accedi alla tibble dei segnali
+  filter(near(time_sec, 0.17, tol = 0.02))  # 200 ms ± 1 ms
+
+# 6. Genera il plot topografico
+ggplot(data_200ms, aes(x = x, y = y, fill = value)) +
+  geom_topo() +  # Usa le coordinate x/y
+  geom_head(size = 1.5) +  # Contorno della testa (regola 'size' se necessario)
+  scale_fill_gradient2(
+    low = "blue", 
+    mid = "white", 
+    high = "red",
+    midpoint = 0  # Punto medio per la scala di colore
+  ) +
+  labs(
+    title = "Topografia a 200 ms",
+    fill = "Amplitudine (µV)"
+  ) +
+  theme_minimal()
+```
+
 # Analisi statistica
 
 ```{r}
@@ -288,6 +347,33 @@ clusters_original <- clusters_original %>%
 sig_clusters <- clusters_original %>%
   filter(p_value < 0.05)
 ```
+
+
+```{r}
+library(flip)
+t.test(dati$value[dati$condition=="Faces"]-
+         dati$value[dati$condition=="ScrambledFaces"])
+flip(value~condition,Strata=~id,data=dati,perms=100)
+library(ggplot2)
+p <- ggplot(subset(dati,channel=="O1"),aes(condition,value))
+p+geom_point(size = 0.1) +geom_boxplot(alpha=.1)
+dati01=subset(dati,channel=="O1")
+p <- ggplot(dati01,aes(condition,value))
+p+geom_point(aes(group = id, colour = id))+
+  geom_line(aes(group = id, colour = id))+
+   geom_boxplot(alpha=.1)
+dati01=subset(dati,channel=="O1")
+value=scale(matrix(dati01$value,5),scale=FALSE)
+dati01$value=as.vector(value)
+
+library(ggplot2)
+p <- ggplot(dati01,aes(condition,value))
+p+geom_point(aes(group = id, colour = id))+
+  geom_line(aes(group = id, colour = id))+
+   geom_boxplot(alpha=.1)
+```
+
+
 
 ```{r}
 #| echo: false

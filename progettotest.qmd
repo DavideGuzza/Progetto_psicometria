@@ -1,0 +1,363 @@
+---
+title: "progettotest"
+format: html
+editor: visual
+---
+
+# Dataset
+
+Questo lavoro di gruppo richiede di effettuare l’analisi di un dataset ERP.
+
+Il dataset è parte di ERPcore, e consiste in un esperimento con 40 partecipanti esposti alla visione passiva di quattro tipologie di stimoli:
+
+-   Volti
+-   Volti scrambled
+-   Automobili
+-   Automobili scrambled Questo tipo di paradigma è tipicamente usato per studiare i processi corticali sottostanti l’elaborazione di volti, e si associano ad uno specifico potenziale evento-relato, la N170.
+
+```{r}
+#| include: false
+library(tidyverse)
+library(ggpubr)
+library(patchwork)
+library(dplyr)
+library(igraph)
+```
+
+```{r}
+#| echo: false
+library(tidyverse)
+
+erp_load <- function(path) {
+  filenames <- list.files(path = path, full.names = TRUE)  
+  lista_dati <- vector("list", length(filenames))  
+  
+  for (i in seq_along(filenames)) {
+    tempdata <- read.table(filenames[i], header = TRUE) 
+    
+    temp_long <- tempdata %>%
+      pivot_longer(cols = -time, names_to = "channel", values_to = "value") %>%
+      mutate(
+        id = ceiling(i / 4),  
+        condition = c("Cars", "Faces", "ScrambledCars", "ScrambledFaces")[(i - 1) %% 4 + 1]  
+      )
+    
+    lista_dati[[i]] <- temp_long  # Salva il tibble trasformato
+    }
+  
+  df_finale <- bind_rows(lista_dati)  # Combina tutti i dati
+  return(df_finale)
+  rm(lista_dati)
+}
+
+df <- erp_load("C:/Users/david/Downloads/ERPDataforstudents")
+df <- df %>% 
+  filter(condition %in% c("Faces", "ScrambledFaces")) 
+```
+
+```{r}
+#| echo: false
+#| label: fig-erp-plot
+#| fig-cap: "**Figura 1.** ERP (*Event-related potentials*) per *Faces* e *ScrambledFaces* in un compito visivo con 28 elettrodi sullo scalpo. Si noti che il positivo è visualizzato in basso sull'asse y, una convenzione comune nella ricerca ERP."
+#| fig-env: custom 
+#| fig-width: 12
+#| fig-height: 9
+#| fig-align: "center"
+
+# assume your data.frame is called `df`  
+# with columns: time (numeric, ms), id (factor/character), 
+# channel (factor/character), value (numeric, μV), condition (factor with levels "face","scrambled")
+
+# 1) make sure channel is a factor with a sensible plotting order
+#    here you could reorder levels to match your scalp‐map layout
+electrode_order <- c(
+  # Frontal Left
+  "FP1", "F7", "F3", "FC3",
+  # Frontal Midline
+  "Fz", "FCz",
+  # Frontal Right
+  "FP2", "F8", "F4", "FC4",
+  # Central Left
+  "C3", "C5",
+  # Central Midline
+  "Cz", "CPz",
+  # Central Right
+  "C4", "C6",
+  # Parietal Left
+  "P3", "P7",
+  # Parietal Midline
+  "Pz",
+  # Parietal Right
+  "P4", "P8",
+  # Occipital/Posterior
+  "PO7", "PO3", "O1",
+  "PO8", "PO4", "O2",
+  "Oz"
+)
+df <- df %>% 
+  mutate(channel = factor(channel, levels=electrode_order))
+
+# 2) compute grand‐average ± SE per time × channel × condition
+df_summary <- df %>%
+  group_by(channel, condition, time) %>%
+  summarize(
+    mean_uV = mean(value),
+    se_uV   = sd(value) / sqrt(n_distinct(id)),
+    .groups = "drop"
+  )
+
+# 3) draw
+p <- ggplot(df_summary, aes(x = time, y = mean_uV, color = condition,fill=condition)) +
+  # Add reference lines at 0 (before data lines to keep them in the background)
+  geom_vline(xintercept = 0, linewidth = 0.3) +
+  geom_hline(yintercept = 0, linewidth = 0.3) +
+  # waveform lines
+  geom_line(linewidth = .6) +
+  # invert y-axis so negative appears up
+  scale_y_reverse() +
+  # one panel per electrode
+  facet_wrap(~ channel, ncol = 6) +
+  # labels & theme
+  labs(
+    x = "Time (ms)",
+    y = "Amplitude (μV)\n(neg up)",
+    color = "Condition",
+    fill  = "Condition"
+  ) +
+  # Theme with larger text
+  theme_minimal(base_size = 14) +  # Base font size (default: 11)
+  theme(
+    # Title and axis labels
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),  # Centered bold title
+    axis.title = element_text(size = 16),  # Axis titles
+    axis.text = element_text(size = 12),   # Axis numbers (e.g., time ticks)
+    # Facet labels (electrode names)
+    strip.text = element_text(size = 12),  
+    # Legend
+    legend.position = "bottom",
+    legend.text = element_text(size = 16),  # Condition labels
+    legend.title = element_text(size = 16),  # "Condition" title
+  )
+  
+
+# 4) print
+print(p)
+```
+
+
+```{r}
+#| echo: false
+#| cache: true
+wide <- df %>%
+  pivot_wider(names_from = condition, values_from = value) %>%
+  mutate(diff = Faces - ScrambledFaces)
+
+
+# 1A) observed t: one‐sample t‑test of diff against zero
+obs_df <- wide %>%
+  group_by(channel, time) %>%
+  summarize(
+    t_obs = t.test(diff)$statistic,    # t-value
+    n     = n(),                       # for reference
+    .groups = "drop"
+  )
+
+set.seed(1234)
+B <- 100
+ids <- unique(wide$id)
+channels <- unique(wide$channel)
+times <- unique(wide$time)
+
+max_t  <- numeric(B)
+min_t  <- numeric(B)
+
+# to speed up: split wide by subject into a list
+by_subj <- split(wide, wide$id)
+
+for(b in 1:B) {
+  # random sign per subject
+  signs <- sample(c(-1,1), length(ids), replace = TRUE)
+  # apply flips
+  permuted <- lapply(seq_along(ids), function(i) {
+    df_i <- by_subj[[ i ]]
+    df_i$diff <- df_i$diff * signs[i]
+    df_i
+  }) %>% bind_rows()
+  
+  # compute t for this permutation
+  tmap <- permuted %>%
+    group_by(channel, time) %>%
+    summarize(t = t.test(diff)$statistic, .groups="drop")
+  
+  max_t[b] <- max(tmap$t)
+  min_t[b] <- min(tmap$t)
+}
+
+# critical thresholds
+thr_pos <- quantile(max_t, probs = 0.975)   # e.g. 97.5%ile
+thr_neg <- quantile(min_t, probs = 0.025)   # e.g.  2.5%ile
+sig_df <- obs_df %>%
+  mutate(
+    thr_pos = thr_pos,
+    thr_neg = thr_neg,
+    sig = case_when(
+      t_obs >= thr_pos ~ "pos",
+      t_obs <= thr_neg ~ "neg",
+      TRUE             ~ "none"
+    )
+  )
+hist(sig_df$t_obs,nclass=100)
+```
+
+```{r}
+#| echo: false
+#| fig-cap: "Diagramma raster che illustra differenze significative tra gli ERP rispetto ai target e gli standard in un compito visivo di oddball secondo un test di permutazione tmax. I rettangoli bianchi e neri indicano gli elettrodi/punti temporali in cui gli ERP rispetto ai target sono rispettivamente più positivi e negativi. I rettangoli grigi indicano gli elettrodi/punti temporali in cui non sono state rilevate differenze significative."
+# Example: sig_df has columns: channel, time, sig ("pos", "neg", "none")
+# Reorder channel factor to reflect desired y-axis ordering (e.g., anterior-to-posterior)
+sig_df$channel <- factor(sig_df$channel)
+ggplot(sig_df, aes(x = time, y = channel, fill = sig)) +
+  geom_tile(color = "black", size = 0.3) +  # Add white grid between tiles
+  scale_fill_manual(
+    values = c("pos" = "white", "neg" = "black", "none" = "gray80"),
+    name = "Significance"
+  ) +
+  labs(
+    x = "Time (ms)",
+    y = "Electrode",
+    subtitle = "Differences between ERPs to Targets and Standards (tmax)"
+  ) +
+  theme_minimal() +
+  theme(
+    panel.grid = element_blank(),
+    axis.text.y = element_text(size = 10),
+    axis.text.x = element_text(size = 10, angle = 90),
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5)
+  )
+
+```
+```{r}
+#| echo: false
+#| cache: true
+t_df <- wide %>%
+  group_by(channel, time) %>%
+  summarize(
+    n        = n(),
+    mean_diff = mean(Faces - ScrambledFaces),
+    sd_diff   = sd(Faces - ScrambledFaces),
+    t_obs     = mean_diff / (sd_diff / sqrt(n))
+  ) %>%
+  ungroup()
+# two‐sided; critical t for df = n−1 at α=0.05
+t_crit <- qt(1 - 0.025, df = unique(t_df$n) - 1)
+
+thresh_df <- t_df %>%
+  mutate(
+    above_thr = if_else(abs(t_obs) > t_crit, TRUE, FALSE)
+  )
+clusters_df <- thresh_df %>%
+  arrange(channel, time) %>%
+  group_by(channel) %>%
+  mutate(cluster_id = cumsum(!above_thr & lag(above_thr, default=FALSE))) %>%
+  filter(above_thr) %>%
+  ungroup()
+cluster_mass <- clusters_df %>%
+  group_by(channel, cluster_id) %>%
+  summarize(
+    cluster_size = n(),
+    mass = sum(t_obs),
+    .groups = "drop"
+  )
+set.seed(1234)
+n_perm <- 1000
+max_masses <- numeric(n_perm)
+
+for (perm in seq_len(n_perm)) {
+  # 1) randomly flip sign of each subject’s difference per channel×time
+  perm_wide <- wide %>%
+    mutate(
+      Faces_p = ifelse(runif(n()) < .5, Faces, ScrambledFaces),
+      Scrambled_p = ifelse(Faces_p == Faces, ScrambledFaces, Faces)
+    )
+  
+  # 2) recompute t‐scores (same as step 1)
+  perm_t <- perm_wide %>%
+    group_by(channel, time) %>%
+    summarize(
+      mean_diff = mean(Faces_p - Scrambled_p),
+      sd_diff   = sd(Faces_p - Scrambled_p),
+      t_obs     = mean_diff / (sd_diff / sqrt(n())),
+      .groups = "drop"
+    ) %>%
+    filter(abs(t_obs) > t_crit) %>%
+    arrange(channel, time) %>%
+    group_by(channel) %>%
+    mutate(cluster_id = cumsum(! (abs(t_obs)>t_crit & lag(abs(t_obs)>t_crit, default=FALSE)))) %>%
+    filter(abs(t_obs) > t_crit) %>%
+    ungroup()
+  
+  # 3) compute cluster masses and store the maximum
+  perm_mass <- perm_t %>%
+    group_by(channel, cluster_id) %>%
+    summarize(mass = sum(t_obs), .groups = "drop")
+  
+  max_masses[perm] <- max(perm_mass$mass, na.rm = TRUE)
+}
+
+cluster_mass <- cluster_mass %>%
+  mutate(
+    p_cluster = mean(max_masses >= mass)
+  )
+sig_clusters <- cluster_mass %>%
+  filter(p_cluster < .05) %>%
+  select(channel, cluster_id, p_cluster)
+
+# join back to data, assign 1 to non‐clustered points:
+final_df <- clusters_df %>%
+  left_join(sig_clusters, by = c("channel", "cluster_id")) %>%
+  mutate(p_adj = coalesce(p_cluster, 1)) %>%
+  select(channel, time, t_obs, cluster_id, p_adj)
+n_sub <- length(unique(df$id))
+# Get degrees of freedom (n_subjects - 1)
+Df <- n_sub - 1
+# For uncorrected p < 0.05 (two-sided)
+t_crit_05 <- qt(1 - 0.025, Df)
+# For uncorrected p < 0.001
+t_crit_001 <- qt(1 - 0.0005, Df)
+# After running the first with t_crit = 2.36
+final_df_A <- final_df %>% mutate(threshold = t_crit_05)
+# After running the second with t_crit = 5.41
+final_df_B <- final_df %>% mutate(threshold = t_crit_001)
+combined_df <- bind_rows(final_df_A, final_df_B)
+hist(combined_df$t_obs,nclass=100)
+abline(v=t_crit_05,col=2)
+abline(v=t_crit_001,col=2)
+```
+
+```{r}
+#| echo: false
+#| fig-width: 12
+#| fig-height: 9
+#| fig-align: "center"
+raster_df <- combined_df %>%
+  mutate(
+    color = case_when(
+      t_obs > threshold ~ "white",
+      t_obs < threshold ~ "black",
+      TRUE                     ~ "red"
+    )
+  )%>%
+  mutate(threshold_label = case_when(
+    threshold == t_crit_05 ~ "Differences between ERPs to Targets and Standards (Maximum Cluster−Level Mass, t threshold = 2.02",
+    threshold == t_crit_001 ~ "Differences between ERPs to Targets and Standards (Maximum Cluster−Level Mass, t threshold = 3.56"
+  ))
+ggplot(raster_df, aes(x = time, y = channel, fill = color)) +
+  geom_tile(color = "black", size = 0.3) + 
+  facet_wrap(~ threshold_label, ncol = 1) +
+  scale_fill_manual(values = c("white" = "white", "black" = "black", "red" = "red")) +
+  labs(
+    title = "",
+    x = "Time (ms)", y = "Electrode"
+  ) +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
