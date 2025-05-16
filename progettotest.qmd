@@ -226,6 +226,9 @@ hist(sig_df$t_obs,nclass=100)
 ```{r}
 #| echo: false
 #| fig-cap: "Diagramma raster che illustra differenze significative tra gli ERP rispetto ai target e gli standard in un compito visivo di oddball secondo un test di permutazione tmax. I rettangoli bianchi e neri indicano gli elettrodi/punti temporali in cui gli ERP rispetto ai target sono rispettivamente più positivi e negativi. I rettangoli grigi indicano gli elettrodi/punti temporali in cui non sono state rilevate differenze significative."
+#| fig-width: 12
+#| fig-height: 9
+#| fig-align: "center"
 # Example: sig_df has columns: channel, time, sig ("pos", "neg", "none")
 # Reorder channel factor to reflect desired y-axis ordering (e.g., anterior-to-posterior)
 sig_df$channel <- factor(sig_df$channel)
@@ -424,6 +427,10 @@ ggplot(plot_df, aes(x = time, y = channel, fill = color)) +
 ```
 
 ```{r}
+#| echo: false
+#| fig-align: center
+#| fig-height: 9
+#| fig-width: 12
 # 3) Build the full grid of channel×time:
 full_grid <- expand_grid(
   channel = unique(t_df$channel),

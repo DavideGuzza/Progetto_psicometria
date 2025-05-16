@@ -1,0 +1,327 @@
+---
+title: "Lavoro di Gruppo 2 - Analisi di dati ERP (versione finale)"
+format:
+    html:
+      toc-title: Table of contents
+      toc: true
+      toc-depth: 2
+      number-sections: true
+      highlight-style: github
+      toc-location: body
+      cap-location: top
+      embed-resources: true
+      self-contained-math: true
+      toc-expand: true
+editor: visual
+---
+
+# Dataset
+
+Questo lavoro di gruppo richiede di effettuare l'analisi di un dataset ERP (*Event-Related Potential*), ossia un insieme di dati raccolti durante esperimenti di elettroencefalografia (EEG), usati per analizzare le risposte elettriche del cervello a stimoli specifici.
+
+Il dataset originale è parte di ERPcore (una risorsa online liberamente disponibile che consiste in paradigmi ottimizzati, script di controllo dell'esperimento, dati di esempio di 40 partecipanti, pipeline di elaborazione dei dati e script di analisi) e consiste in un esperimento con 40 partecipanti esposti alla visione passiva di quattro tipologie di stimoli:
+
+-   Volti
+-   Volti scrambled (ossia manipolati per alterare la disposizione delle caratteristiche facciali)
+-   Automobili
+-   Automobili scrambled
+
+Si noti che per la parte di analisi verranno utilizzati solo gli stimoli relativi a facce e facce scrambled. Questo tipo di paradigma è tipicamente usato per studiare i processi corticali sottostanti l'elaborazione di volti, e si associano ad uno specifico potenziale evento-relato, la N170.
+
+La N170 è una componente dell'EEG che riflette l'elaborazione dei volti umani nel cervello. Essendo uno stimolo visivo viene registrata più chiaramente nelle regioni inferotemporali-occipitali del cervello, soprattutto nell'emisfero destro ed è caratterizzata da una deflessione negativa del segnale EEG (N) che avviene circa 170 millesimi dopo la presentazione di uno stimolo visivo. Risponde in modo diverso tra volti e volti scrambled, in particolare se lo stimolo è una faccia scrambled avrà un'ampiezza ridotta, una latenza più lunga e sarà meno lateralizzata o più debole.
+
+Per prima cosa è stato creato un unico dataset in cui i dati sono riportati in formato lungo, in modo che ad ogni riga corrispondesse una combinazione dei valori di tempo e voltaggio ottenuti da un elettrodo per uno specifico partecipante e uno specifico stimolo. Le variabili considerate sono quindi:
+
+-   `id`: l'identificativo del partecipante;
+
+-   `condition`: la tipologia di stimolo presentata al partecipante;
+
+-   `time`: il tempo relativo all'evento (in millisecondi), che assume valori negativi prima dello stimolo e positivi dopo lo stimolo;
+
+-   `channel`: il canale EEG da cui è stato registrato il segnale (ogni canale corrisponde a un elettrodo sulla testa);
+
+-   `value`: il valore del potenziale elettrico misurato (espresso in microvolt, $µV$).
+
+```{r}
+#| echo: false
+#| output: false
+library(tidyverse)
+library(ggpubr)
+library(patchwork)
+library(dplyr)
+library(igraph)
+library(lme4)
+library(flip)
+library(eegkit)
+filter = dplyr::filter
+```
+
+```{r}
+#| echo: false
+#| output: false
+
+## PUNTO 1: Importare i dati in un unico dataframe
+
+# funzione per caricare i dati e unire i dataframe
+erp_load <- function(path) {
+  filenames <- list.files(path = path, full.names = TRUE)  # lista dei file nella cartella
+  lista_dati <- vector("list", length(filenames)) # lista vuota lunga come il numero di file
+  
+  for (i in seq_along(filenames)) {
+    tempdata <- read.table(filenames[i], header = TRUE) # per ogni file, la prima colonna è un header
+    
+    temp_long <- tempdata %>%
+      pivot_longer(cols = -time, names_to = "channel", values_to = "value") %>%
+      mutate(
+        id = ceiling(i / 4),  # colonna ID (raggruppa ogni 4)
+        condition = c("Cars", "Faces", "ScrambledCars", "ScrambledFaces")[(i - 1) %% 4 + 1] 
+        # nuova colonna con la condizione basata sulla posizione del file
+      )
+    
+    lista_dati[[i]] <- temp_long  # salva il dataframe nella posizione i della lista
+  }
+  
+  df_finale <- bind_rows(lista_dati)  # unisce tutti i dataframe in uno unico
+  return(df_finale)
+  
+  rm(lista_dati)
+}
+
+# carica i dati
+dati <- erp_load("C:/Users/david/Downloads/ERPDataforstudents")
+dati <- dati %>% 
+  filter(condition %in% c("Faces", "ScrambledFaces")) %>% 
+  mutate(id = as.factor(id)) # filtro per tenere solo le facce e le facce scrambled
+
+head(dati) # visualizzo i dati
+```
+
+# Analisi descrittiva
+
+Eseguire l'esplorazione del dataset rispetto alla differenza tra facce e facce scrambled su tutti gli elettrodi.
+
+## Creare una rappresentazione grafica delle waveform delle due condizioni sperimentali per tutti gli elettrodi
+
+```{r}
+#| echo: false
+#| fig-cap: "**Figura 1.** ERP (*Event-related potentials*) per *Faces* e *ScrambledFaces* in un compito visivo con 28 elettrodi sullo scalpo. Si noti che il positivo è visualizzato in basso sull'asse y, una convenzione comune nella ricerca ERP."
+#| fig-width: 12
+#| fig-height: 9
+#| fig-align: "center"
+
+## PUNTO 2: Eseguire l’esplorazione del dataset rispetto alla differenza tra facce e 
+## facce scrambled su tutti gli elettrodi
+
+
+# definisco ordine elettrodi per la visualizzazione
+electrode_order <- c(
+  # Frontal Left
+  "FP1", "F7", "F3", "FC3",
+  # Frontal Midline
+  "Fz", "FCz",
+  # Frontal Right
+  "FP2", "F8", "F4", "FC4",
+  # Central Left
+  "C3", "C5",
+  # Central Midline
+  "Cz", "CPz",
+  # Central Right
+  "C4", "C6",
+  # Parietal Left
+  "P3", "P7",
+  # Parietal Midline
+  "Pz",
+  # Parietal Right
+  "P4", "P8",
+  # Occipital/Posterior
+  "PO7", "PO3", "O1",
+  "PO8", "PO4", "O2",
+  "Oz"
+)
+
+# trasformo la colonna channel da character a fattore a livelli ordinati
+dati <- dati %>% 
+  mutate(channel = factor(channel, levels=electrode_order))
+
+#  Calcola statistiche riassuntive per ogni combinazione di canale, condizione e tempo
+dati_summary <- dati %>%
+  group_by(channel, condition, time) %>%
+  summarize(
+    mean_uV = mean(value),    # media dell'ampiezza
+    se_uV   = sd(value) / sqrt(n_distinct(id)), # errore standard della media
+    .groups = "drop"
+  )
+
+#View(dati_summary)
+
+## 2a. Creare una rappresentazione grafica delle waveform delle due condizioni sperimentali per tutti gli elettrodi
+p <- ggplot(dati_summary, aes(x = time, y = mean_uV, color = condition,fill=condition)) +
+  
+  # linee di riferimento per tempo=0 e ampiezza=0
+  geom_vline(xintercept = 0, linewidth = 0.3) +
+  geom_hline(yintercept = 0, linewidth = 0.3) +
+  
+  geom_line(linewidth = .6) +  # linee del segnale erp per ogni condizione
+  
+  scale_y_reverse() +   # inverto l'asse y (il negativo va in alto)
+  
+  facet_wrap(~ channel, ncol = 6) + # divido i dati in canali
+  
+  labs(
+    x = "Tempo (ms)",
+    y = "Ampiezza (μV)\n(neg up)",
+    color = "Condizione",
+    fill  = "Condizione"
+  ) +
+  
+  # estetica grafico
+  theme_minimal(base_size = 14) +  
+  theme(
+    plot.title = element_text(size = 16, face = "bold", hjust = 0.5),  
+    axis.title = element_text(size = 16),  
+    axis.text = element_text(size = 12),   
+    strip.text = element_text(size = 12),  
+    legend.position = "bottom",
+    legend.text = element_text(size = 16), 
+    legend.title = element_text(size = 16),  
+  )
+
+print(p)
+```
+
+```{r}
+#| echo: false
+
+# Eseguire test t per campioni appaiati su ciascun elettrodo
+test_t_paired <- dati %>%
+  filter(time >= 150, time <= 190, channel %in% electrode_order) %>% 
+  group_by(channel) %>%
+  summarise(p_value = t.test(value ~ condition, data = .)$p.value)
+
+# Aggiungere asterischi per significatività
+test_t_paired <- test_t_paired %>%
+  mutate(p_adj = p.adjust(p_value, method = "fdr")) %>%
+  mutate(significance = case_when(
+    p_value < 0.001 ~ "***",
+    p_value < 0.01  ~ "**",
+    p_value < 0.05  ~ "*",
+    TRUE            ~ "ns"
+  ))
+
+print(test_t_paired)
+
+```
+
+Osservando la Figura 1 e i risultati del test t per campioni appaiati, si può notare che le differenze tra le condizioni Faces e ScrambledFaces sono altamente significative per tutti gli elettrodi analizzati, il che dimostra che i soggetti elaborano in modo distinto le facce e le facce scambled.. Si è applicato al test t la correzione False Discovery Rate per gestire il problema dei confronti multipli, confermando che le differenze osservate non siano dovute a fluttuazioni casuali.
+
+Qui sotto ho fatto il grafico per il lobo frontale sinistro, avevo visto che nelle prime versioni di codice Davide le aveva fatte, quindi ho sistemato i grafici per renderli come quello sopra, ma ho aggiunto le bande di confidenza. Ditemi voi se tenerli o no.
+
+```{r}
+#| echo: false
+#| fig-cap: "**Figura 2** ERP (*Event-related potentials*) per *Faces* e *ScrambledFaces* in un compito visivo con gli elettrodi del lobo frontale sinistro. Si noti che il positivo è visualizzato in basso sull'asse y, una convenzione comune nella ricerca ERP."
+
+
+# Filtra il dataset per includere solo i canali frontal left e imposta l'ordine corretto
+dati_filtered <- dati %>%
+  dplyr::filter(channel %in% c("F7", "F3", "FC3")) %>%
+  mutate(channel = factor(channel, levels = c("F7", "F3", "FC3"))) %>%  # Ordina i fattori
+  group_by(channel, condition, time) %>%
+  summarize(
+    mean_uV = mean(value),    # media dell'ampiezza
+    se_uV   = sd(value) / sqrt(n_distinct(id)), # errore standard della media
+    .groups = "drop"
+  )
+
+p1 <- ggplot(dati_filtered, aes(x = time, y = mean_uV, color = condition, fill = condition)) +
+  
+  # Linee di riferimento per tempo=0 e ampiezza=0
+  geom_vline(xintercept = 0, linewidth = 0.3) +
+  geom_hline(yintercept = 0, linewidth = 0.3) +
+  
+  # Linee ERP per ogni condizione
+  geom_line(linewidth = .6) +
+  
+  # Aggiunta delle bande di confidenza
+  geom_ribbon(aes(ymin = mean_uV - se_uV, ymax = mean_uV + se_uV), alpha = 0.2) +
+  
+  # Inversione dell'asse Y (negativo in alto)
+  scale_y_reverse() +
+  
+  # Suddivisione dei dati per canale con l'ordine desiderato
+  facet_wrap(~ channel, ncol = 4) +
+  
+  labs(
+    x = "Tempo (ms)",
+    y = "Ampiezza (μV)\n(neg up)",
+    color = "Condizione",
+    fill  = "Condizione"
+  ) +
+  
+  # Tema grafico minimalista
+  theme_minimal(base_size = 14) +  
+  theme(
+    plot.title = element_text(size = 12, face = "bold", hjust = 0.5),  
+    axis.title = element_text(size = 12),  
+    axis.text = element_text(size = 12),   
+    strip.text = element_text(size = 12),  
+    legend.position = "bottom",
+    legend.text = element_text(size = 12), 
+    legend.title = element_text(size = 12)  
+  )
+
+print(p1)
+```
+
+## Riportare le statistiche descrittive per le due condizioni sperimentali nella finestra 150-190 ms (per tutti gli elettrodi)
+
+```{r}
+#| echo: false
+#| fig-cap: "**Figura 3** waveform ERP per le condizioni Faces e ScrambledFaces filtrate per la finestra temporale compresa tra i 150 e i 190 ms."
+# Filtra i dati per la finestra temporale di interesse (150-190 ms) e per i canali specificati
+dati_n170 <- dati %>%
+  filter(time >= 150, time <= 190, channel %in% electrode_order) %>%
+  group_by(channel, condition) %>%
+  summarise(mean_amp = mean(value, na.rm = TRUE),  # media ampiezza segnale EEG
+    sd_amp = sd(value, na.rm = TRUE),  # deviazione standard ampiezza
+    n = n(),  # numero di osservazioni
+    sem_amp = sd_amp / sqrt(n),  # err std della media
+    .groups = "drop"
+  )
+
+# grafico della media dell'ampiezza N170 con barre di errore
+plot_n170_summary <- function(data) {
+  ggplot(data, aes(x = channel, y = mean_amp, color = condition)) +
+    
+    # punti rappresentano le medie dell'ampiezza per ciascun canale e condizione
+    geom_point(size = 1.5, position = position_dodge(width = 0.5)) +
+    # barre di errore su IC(95%)
+    geom_errorbar(
+      aes(
+        ymin = mean_amp - 1.96 * sem_amp,  # Limite inferiore
+        ymax = mean_amp + 1.96 * sem_amp   # Limite superiore
+      ),
+      width = 1,
+      position = position_dodge(width = 0.5)  
+    ) +
+    
+    # Alinea tratteggiata a y=0 per riferimento
+    geom_hline(yintercept = 0, linetype = "dashed", alpha = 0.5) +
+    
+    labs(
+      x = "Elettrodo",
+      y = "Ampiezza Media (μV)",
+      color = "Condizione"
+    ) +
+    scale_color_manual(values = c("Faces" = "#F8766D", "ScrambledFaces" = "#00BFC4")) +
+    theme_minimal() +
+    theme(
+      legend.position = "top",
+      panel.grid.major.x = element_blank()
+    ) +
+    coord_flip() # inverte gli assi
+}
+
+plot_n170_summary(dati_n170)
+```
+
+
