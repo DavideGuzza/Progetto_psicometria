@@ -1,6 +1,18 @@
 ---
 title: "progettotest"
-format: html
+format:
+    html:
+      toc-title: Table of contents
+      toc: true
+      toc-depth: 2
+      number-sections: true
+      highlight-style: github
+      toc-location: body
+      cap-location: top
+      page-layout: full
+      embed-resources: true
+      self-contained-math: true
+      toc-expand: true
 editor: visual
 ---
 
@@ -439,8 +451,8 @@ combined_df <- combined_df %>%
     )
   )%>%
   mutate(threshold_label = case_when(
-    threshold == t_crit_05 ~ "Differences between ERPs to Targets and Standards (Maximum Cluster−Level Mass, t threshold = 2.36",
-    threshold == t_crit_001 ~ "Differences between ERPs to Targets and Standards (Maximum Cluster−Level Mass, t threshold = 5.41"
+    threshold == t_crit_05 ~ "Differences between ERPs to Faces and FacesScrambled (Maximum Cluster−Level Mass, t threshold = 2.36",
+    threshold == t_crit_001 ~ "Differences between ERPs to Faces and FacesScrambled (Maximum Cluster−Level Mass, t threshold = 5.41"
   ))
 # 4) Plot with ggplot2
 ggplot(combined_df, aes(x = time, y = channel, fill = color)) +
