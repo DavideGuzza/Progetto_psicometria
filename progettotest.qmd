@@ -25,6 +25,7 @@ library(igraph)
 library(lme4)
 library(flip)
 library(eegkit)
+filter = dplyr::filter
 ```
 
 ```{r}
@@ -53,7 +54,7 @@ erp_load <- function(path) {
 
 df <- erp_load("C:/Users/david/Downloads/ERPDataforstudents")
 df <- df %>% 
-  dplyr::filter(condition %in% c("Faces", "ScrambledFaces")) %>% 
+  filter(condition %in% c("Faces", "ScrambledFaces")) %>% 
   mutate(id = as.factor(id))
 ```
 
@@ -351,8 +352,8 @@ raster_df <- combined_df %>%
       )
   )%>%
   mutate(threshold_label = case_when(
-    threshold == t_crit_05 ~ "Differences between ERPs to Targets and Standards (Maximum Cluster−Level Mass, t threshold = 2.02",
-    threshold == t_crit_001 ~ "Differences between ERPs to Targets and Standards (Maximum Cluster−Level Mass, t threshold = 3.56"
+    threshold == t_crit_05 ~ "Differences between ERPs to Targets and Standards (Maximum Cluster−Level Mass, t threshold = 2.36",
+    threshold == t_crit_001 ~ "Differences between ERPs to Targets and Standards (Maximum Cluster−Level Mass, t threshold = 5.41"
   ))
 ggplot(raster_df, aes(x = time, y = channel, fill = color)) +
   geom_tile(color = "black", size = 0.3) + 
@@ -392,8 +393,8 @@ plot_df <- plot_df %>%
     )
   )%>%
   mutate(threshold_label = case_when(
-    threshold == t_crit_05 ~ "Differences between ERPs to Targets and Standards (Maximum Cluster−Level Mass, t threshold = 2.02",
-    threshold == t_crit_001 ~ "Differences between ERPs to Targets and Standards (Maximum Cluster−Level Mass, t threshold = 3.56"
+    threshold == t_crit_05 ~ "Differences between ERPs to Faces and ScrambledFaces (Maximum Cluster−Level Mass, t threshold = 2.36",
+    threshold == t_crit_001 ~ "Differences between ERPs to Faces and ScrambledFaces (Maximum Cluster−Level Mass, t threshold = 5.41"
   ))
 
 # 4) Plot with ggplot2
@@ -429,11 +430,11 @@ final_df_A <- plot_df %>% mutate(threshold = t_crit_05)
 # After running the second with t_crit = 5.41
 final_df_B <- plot_df %>% mutate(threshold = t_crit_001)
 combined_df <- bind_rows(final_df_A, final_df_B)
-combined_df <- plot_df %>%
+combined_df <- combined_df %>%
   mutate(
     color = case_when(
-      t_obs >  threshold & p_adj < 0.05 ~ "white",  # significant positive
-      t_obs < -threshold & p_adj < 0.05 ~ "black",  # significant negative
+      t_obs >  threshold  ~ "white",  # significant positive
+      t_obs < -threshold  ~ "black",  # significant negative
       TRUE                              ~ "grey80"  # all else
     )
   )%>%
@@ -442,7 +443,7 @@ combined_df <- plot_df %>%
     threshold == t_crit_001 ~ "Differences between ERPs to Targets and Standards (Maximum Cluster−Level Mass, t threshold = 5.41"
   ))
 # 4) Plot with ggplot2
-ggplot(plot_df, aes(x = time, y = channel, fill = color)) +
+ggplot(combined_df, aes(x = time, y = channel, fill = color)) +
   geom_tile(color = "black", size = 0.3) + 
   facet_wrap(~ threshold_label, ncol = 1) +
   scale_fill_manual(values = c("white" = "white", "black" = "black", "grey80" = "grey80")) +
@@ -453,40 +454,12 @@ ggplot(plot_df, aes(x = time, y = channel, fill = color)) +
   theme_minimal() +
   theme(legend.position = "none")
 ```
-```{r}
-library(eegUtils)
-electrode_coords <- data.frame(
-  electrode = c("FP1", "F3", "F7", "FC3", "C3", "C5", "P3", "P7", "PO7", "PO3", 
-                "O1", "Oz", "Pz", "CPz", "FP2", "Fz", "F4", "F8", "FC4", "FCz", 
-                "Cz", "C4", "C6", "P4", "P8", "PO8", "PO4", "O2"),
-  # Scale down coordinates by factor of 0.5-0.6 to match head size
-  x = c(-0.23, -0.50, -0.71, -0.50, -0.71, -0.87, -0.50, -0.71, -0.38, -0.23, 
-        -0.13, 0.00, 0.00, 0.00, 0.23, 0.00, 0.50, 0.71, 0.50, 0.00, 
-        0.00, 0.71, 0.87, 0.50, 0.71, 0.38, 0.23, 0.13) * 85,
-  y = c(0.91, 0.85, 0.71, 0.45, 0.00, -0.23, -0.45, -0.71, -0.92, -0.91, 
-        -0.98, -1.00, -0.50, 0.00, 0.91, 0.85, 0.85, 0.71, 0.45, 0.53, 
-        0.00, 0.00, -0.23, -0.45, -0.71, -0.92, -0.91, -0.98) * 85
-)
-# Plot with labels
-ggplot(electrode_coords, aes(x = x, y = y)) +
-  # Plot points
-  geom_point(size = 3, color = "red") +  # Customize point appearance
-  # Add labels (adjust `vjust` to position text above/below points)
-  geom_text(aes(label = electrode), 
-            size = 3, 
-            vjust = -1.2,  # Moves text upward; use +1.2 to move downward
-            check_overlap = TRUE) +  # Avoids overlapping labels
-  # Add head outline (if using eegUtils) # Requires `eegUtils`
-  # Adjust plot appearance
-  geom_head(linewidth = 1.5, colour = "black") +  
-  coord_fixed() +  # Ensures proper aspect ratio
-  theme_void()     # Removes axes/background
-```
+
 
 
 ```{r}
 df_CAD <- df %>% 
-  dplyr::filter(time >= 150, time <= 190,channel %in% c("F4","FC4","F8")) 
+  filter(time >= 150, time <= 190,channel %in% c("F4","FC4","F8")) 
 mod_mix=lmer(value~ channel*condition +(channel|id),data=df_CAD,control = lmerControl(optimizer = "optimx", optCtrl = list(method = "nlminb")))
 car::Anova(mod_mix)
 df_CAD$residuals=residuals(mod_mix)
@@ -508,24 +481,12 @@ pvals=getFlip(res,"Adjust:maxT")
 rownames(pvals)=gsub("channel","",rownames(pvals))
 
 # match to eeg coordinates
-
+data("eegcoord")
 cidx <- match(rownames(pvals),rownames(eegcoord))
 
 # plot t-stat in 2d
 eegspace(eegcoord[cidx,4:5],-log10(pvals[,1]),cex.point = 3,colorlab="-log10(adj-p)",mycolors=heat.colors(4))
 ```
 
-```{r}
-data(eegcoord)
-eegcoord$channel <- rownames(eegcoord)
-df <- df %>%
-  mutate(channel=toupper(channel)) %>% 
-  left_join(eegcoord[,c(4,5,6)], by = c("channel" = "channel")) %>% 
-  mutate(Lateral=case_when(
-    xproj < -0.05 ~ "Left",
-    xproj > 0.05 ~ "Right",
-    TRUE ~ "Middle"
-  ))
-dataCoeff=obs2coeffWithin(value~ channel*Lateral*condition,data=df,units=~id)
-```
+
 

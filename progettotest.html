@@ -191,8 +191,8 @@ Figure&nbsp;1: <strong>Figura 1.</strong> ERP (<em>Event-related potentials</em>
 <span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a>    )</span>
 <span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a>  )<span class="sc">%&gt;%</span></span>
 <span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">threshold_label =</span> <span class="fu">case_when</span>(</span>
-<span id="cb3-26"><a href="#cb3-26" aria-hidden="true" tabindex="-1"></a>    threshold <span class="sc">==</span> t_crit_05 <span class="sc">~</span> <span class="st">"Differences between ERPs to Targets and Standards (Maximum Cluster−Level Mass, t threshold = 2.02"</span>,</span>
-<span id="cb3-27"><a href="#cb3-27" aria-hidden="true" tabindex="-1"></a>    threshold <span class="sc">==</span> t_crit_001 <span class="sc">~</span> <span class="st">"Differences between ERPs to Targets and Standards (Maximum Cluster−Level Mass, t threshold = 3.56"</span></span>
+<span id="cb3-26"><a href="#cb3-26" aria-hidden="true" tabindex="-1"></a>    threshold <span class="sc">==</span> t_crit_05 <span class="sc">~</span> <span class="st">"Differences between ERPs to Faces and ScrambledFaces (Maximum Cluster−Level Mass, t threshold = 2.36"</span>,</span>
+<span id="cb3-27"><a href="#cb3-27" aria-hidden="true" tabindex="-1"></a>    threshold <span class="sc">==</span> t_crit_001 <span class="sc">~</span> <span class="st">"Differences between ERPs to Faces and ScrambledFaces (Maximum Cluster−Level Mass, t threshold = 5.41"</span></span>
 <span id="cb3-28"><a href="#cb3-28" aria-hidden="true" tabindex="-1"></a>  ))</span>
 <span id="cb3-29"><a href="#cb3-29" aria-hidden="true" tabindex="-1"></a></span>
 <span id="cb3-30"><a href="#cb3-30" aria-hidden="true" tabindex="-1"></a><span class="co"># 4) Plot with ggplot2</span></span>
@@ -210,6 +210,186 @@ Figure&nbsp;1: <strong>Figura 1.</strong> ERP (<em>Event-related potentials</em>
 <div>
 <figure class="figure">
 <p><img src="progettotest_files/figure-html/unnamed-chunk-7-1.png" class="img-fluid figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+</div>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co"># 3) Build the full grid of channel×time:</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>full_grid <span class="ot">&lt;-</span> <span class="fu">expand_grid</span>(</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">channel =</span> <span class="fu">unique</span>(t_df<span class="sc">$</span>channel),</span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">time    =</span> <span class="fu">unique</span>(t_df<span class="sc">$</span>time)</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a><span class="co"># 4) Left‐join both tables onto it:</span></span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>plot_df <span class="ot">&lt;-</span> full_grid <span class="sc">%&gt;%</span></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>  <span class="fu">left_join</span>(t_df <span class="sc">%&gt;%</span> <span class="fu">select</span>(channel, time, t_obs), <span class="at">by =</span> <span class="fu">c</span>(<span class="st">"channel"</span>,<span class="st">"time"</span>)) <span class="sc">%&gt;%</span></span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>  <span class="fu">left_join</span>(raster_df <span class="sc">%&gt;%</span> <span class="fu">select</span>(channel, time, p_adj), <span class="at">by =</span> <span class="fu">c</span>(<span class="st">"channel"</span>,<span class="st">"time"</span>))</span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>t_crit_05 <span class="ot">&lt;-</span> <span class="fl">2.36</span></span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a><span class="co"># For uncorrected p &lt; 0.001</span></span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>t_crit_001 <span class="ot">&lt;-</span> <span class="fl">5.41</span></span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a><span class="co"># After running the first with t_crit = 2.36</span></span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a>final_df_A <span class="ot">&lt;-</span> plot_df <span class="sc">%&gt;%</span> <span class="fu">mutate</span>(<span class="at">threshold =</span> t_crit_05)</span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a><span class="co"># After running the second with t_crit = 5.41</span></span>
+<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a>final_df_B <span class="ot">&lt;-</span> plot_df <span class="sc">%&gt;%</span> <span class="fu">mutate</span>(<span class="at">threshold =</span> t_crit_001)</span>
+<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a>combined_df <span class="ot">&lt;-</span> <span class="fu">bind_rows</span>(final_df_A, final_df_B)</span>
+<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a>combined_df <span class="ot">&lt;-</span> combined_df <span class="sc">%&gt;%</span></span>
+<span id="cb4-20"><a href="#cb4-20" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(</span>
+<span id="cb4-21"><a href="#cb4-21" aria-hidden="true" tabindex="-1"></a>    <span class="at">color =</span> <span class="fu">case_when</span>(</span>
+<span id="cb4-22"><a href="#cb4-22" aria-hidden="true" tabindex="-1"></a>      t_obs <span class="sc">&gt;</span>  threshold  <span class="sc">~</span> <span class="st">"white"</span>,  <span class="co"># significant positive</span></span>
+<span id="cb4-23"><a href="#cb4-23" aria-hidden="true" tabindex="-1"></a>      t_obs <span class="sc">&lt;</span> <span class="sc">-</span>threshold  <span class="sc">~</span> <span class="st">"black"</span>,  <span class="co"># significant negative</span></span>
+<span id="cb4-24"><a href="#cb4-24" aria-hidden="true" tabindex="-1"></a>      <span class="cn">TRUE</span>                              <span class="sc">~</span> <span class="st">"grey80"</span>  <span class="co"># all else</span></span>
+<span id="cb4-25"><a href="#cb4-25" aria-hidden="true" tabindex="-1"></a>    )</span>
+<span id="cb4-26"><a href="#cb4-26" aria-hidden="true" tabindex="-1"></a>  )<span class="sc">%&gt;%</span></span>
+<span id="cb4-27"><a href="#cb4-27" aria-hidden="true" tabindex="-1"></a>  <span class="fu">mutate</span>(<span class="at">threshold_label =</span> <span class="fu">case_when</span>(</span>
+<span id="cb4-28"><a href="#cb4-28" aria-hidden="true" tabindex="-1"></a>    threshold <span class="sc">==</span> t_crit_05 <span class="sc">~</span> <span class="st">"Differences between ERPs to Targets and Standards (Maximum Cluster−Level Mass, t threshold = 2.36"</span>,</span>
+<span id="cb4-29"><a href="#cb4-29" aria-hidden="true" tabindex="-1"></a>    threshold <span class="sc">==</span> t_crit_001 <span class="sc">~</span> <span class="st">"Differences between ERPs to Targets and Standards (Maximum Cluster−Level Mass, t threshold = 5.41"</span></span>
+<span id="cb4-30"><a href="#cb4-30" aria-hidden="true" tabindex="-1"></a>  ))</span>
+<span id="cb4-31"><a href="#cb4-31" aria-hidden="true" tabindex="-1"></a><span class="co"># 4) Plot with ggplot2</span></span>
+<span id="cb4-32"><a href="#cb4-32" aria-hidden="true" tabindex="-1"></a><span class="fu">ggplot</span>(combined_df, <span class="fu">aes</span>(<span class="at">x =</span> time, <span class="at">y =</span> channel, <span class="at">fill =</span> color)) <span class="sc">+</span></span>
+<span id="cb4-33"><a href="#cb4-33" aria-hidden="true" tabindex="-1"></a>  <span class="fu">geom_tile</span>(<span class="at">color =</span> <span class="st">"black"</span>, <span class="at">size =</span> <span class="fl">0.3</span>) <span class="sc">+</span> </span>
+<span id="cb4-34"><a href="#cb4-34" aria-hidden="true" tabindex="-1"></a>  <span class="fu">facet_wrap</span>(<span class="sc">~</span> threshold_label, <span class="at">ncol =</span> <span class="dv">1</span>) <span class="sc">+</span></span>
+<span id="cb4-35"><a href="#cb4-35" aria-hidden="true" tabindex="-1"></a>  <span class="fu">scale_fill_manual</span>(<span class="at">values =</span> <span class="fu">c</span>(<span class="st">"white"</span> <span class="ot">=</span> <span class="st">"white"</span>, <span class="st">"black"</span> <span class="ot">=</span> <span class="st">"black"</span>, <span class="st">"grey80"</span> <span class="ot">=</span> <span class="st">"grey80"</span>)) <span class="sc">+</span></span>
+<span id="cb4-36"><a href="#cb4-36" aria-hidden="true" tabindex="-1"></a>  <span class="fu">labs</span>(</span>
+<span id="cb4-37"><a href="#cb4-37" aria-hidden="true" tabindex="-1"></a>    <span class="at">title =</span> <span class="st">""</span>,</span>
+<span id="cb4-38"><a href="#cb4-38" aria-hidden="true" tabindex="-1"></a>    <span class="at">x =</span> <span class="st">"Time (ms)"</span>, <span class="at">y =</span> <span class="st">"Electrode"</span></span>
+<span id="cb4-39"><a href="#cb4-39" aria-hidden="true" tabindex="-1"></a>  ) <span class="sc">+</span></span>
+<span id="cb4-40"><a href="#cb4-40" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme_minimal</span>() <span class="sc">+</span></span>
+<span id="cb4-41"><a href="#cb4-41" aria-hidden="true" tabindex="-1"></a>  <span class="fu">theme</span>(<span class="at">legend.position =</span> <span class="st">"none"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="progettotest_files/figure-html/unnamed-chunk-8-1.png" class="img-fluid figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+</div>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb5"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" aria-hidden="true" tabindex="-1"></a>df_CAD <span class="ot">&lt;-</span> df <span class="sc">%&gt;%</span> </span>
+<span id="cb5-2"><a href="#cb5-2" aria-hidden="true" tabindex="-1"></a>  <span class="fu">filter</span>(time <span class="sc">&gt;=</span> <span class="dv">150</span>, time <span class="sc">&lt;=</span> <span class="dv">190</span>,channel <span class="sc">%in%</span> <span class="fu">c</span>(<span class="st">"F4"</span>,<span class="st">"FC4"</span>,<span class="st">"F8"</span>)) </span>
+<span id="cb5-3"><a href="#cb5-3" aria-hidden="true" tabindex="-1"></a>mod_mix<span class="ot">=</span><span class="fu">lmer</span>(value<span class="sc">~</span> channel<span class="sc">*</span>condition <span class="sc">+</span>(channel<span class="sc">|</span>id),<span class="at">data=</span>df_CAD,<span class="at">control =</span> <span class="fu">lmerControl</span>(<span class="at">optimizer =</span> <span class="st">"optimx"</span>, <span class="at">optCtrl =</span> <span class="fu">list</span>(<span class="at">method =</span> <span class="st">"nlminb"</span>)))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stderr">
+<pre><code>Caricamento dei namespace richiesti: optimx</code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb7"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" aria-hidden="true" tabindex="-1"></a>car<span class="sc">::</span><span class="fu">Anova</span>(mod_mix)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Analysis of Deviance Table (Type II Wald chisquare tests)
+
+Response: value
+                     Chisq Df Pr(&gt;Chisq)    
+channel             17.861  2  0.0001323 ***
+condition         1914.497  1  &lt; 2.2e-16 ***
+channel:condition   10.633  2  0.0049098 ** 
+---
+Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1</code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb9"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" aria-hidden="true" tabindex="-1"></a>df_CAD<span class="sc">$</span>residuals<span class="ot">=</span><span class="fu">residuals</span>(mod_mix)</span>
+<span id="cb9-2"><a href="#cb9-2" aria-hidden="true" tabindex="-1"></a>p <span class="ot">&lt;-</span> <span class="fu">ggplot</span>(df_CAD, <span class="fu">aes</span>(<span class="at">x=</span>id, <span class="at">y=</span>residuals,<span class="at">fill=</span>condition)) <span class="sc">+</span> <span class="fu">geom_boxplot</span>()</span>
+<span id="cb9-3"><a href="#cb9-3" aria-hidden="true" tabindex="-1"></a>p</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="progettotest_files/figure-html/unnamed-chunk-9-1.png" class="img-fluid figure-img" width="672"></p>
+</figure>
+</div>
+</div>
+</div>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb10"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>dataCoeff<span class="ot">=</span><span class="fu">obs2coeffWithin</span>(value<span class="sc">~</span> channel<span class="sc">*</span>condition,<span class="at">data=</span>df,<span class="at">units=</span><span class="sc">~</span>id)</span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a><span class="fu">colnames</span>(dataCoeff<span class="sc">$</span>coeffWithin)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code> [1] "(Intercept)"                        "channelF7"                         
+ [3] "channelF3"                          "channelFC3"                        
+ [5] "channelFz"                          "channelFCz"                        
+ [7] "channelFP2"                         "channelF8"                         
+ [9] "channelF4"                          "channelFC4"                        
+[11] "channelC3"                          "channelC5"                         
+[13] "channelCz"                          "channelCPz"                        
+[15] "channelC4"                          "channelC6"                         
+[17] "channelP3"                          "channelP7"                         
+[19] "channelPz"                          "channelP4"                         
+[21] "channelP8"                          "channelPO7"                        
+[23] "channelPO3"                         "channelO1"                         
+[25] "channelPO8"                         "channelPO4"                        
+[27] "channelO2"                          "channelOz"                         
+[29] "conditionScrambledFaces"            "channelF7:conditionScrambledFaces" 
+[31] "channelF3:conditionScrambledFaces"  "channelFC3:conditionScrambledFaces"
+[33] "channelFz:conditionScrambledFaces"  "channelFCz:conditionScrambledFaces"
+[35] "channelFP2:conditionScrambledFaces" "channelF8:conditionScrambledFaces" 
+[37] "channelF4:conditionScrambledFaces"  "channelFC4:conditionScrambledFaces"
+[39] "channelC3:conditionScrambledFaces"  "channelC5:conditionScrambledFaces" 
+[41] "channelCz:conditionScrambledFaces"  "channelCPz:conditionScrambledFaces"
+[43] "channelC4:conditionScrambledFaces"  "channelC6:conditionScrambledFaces" 
+[45] "channelP3:conditionScrambledFaces"  "channelP7:conditionScrambledFaces" 
+[47] "channelPz:conditionScrambledFaces"  "channelP4:conditionScrambledFaces" 
+[49] "channelP8:conditionScrambledFaces"  "channelPO7:conditionScrambledFaces"
+[51] "channelPO3:conditionScrambledFaces" "channelO1:conditionScrambledFaces" 
+[53] "channelPO8:conditionScrambledFaces" "channelPO4:conditionScrambledFaces"
+[55] "channelO2:conditionScrambledFaces"  "channelOz:conditionScrambledFaces" </code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb12"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a>Y<span class="ot">=</span>dataCoeff<span class="sc">$</span>coeffWithin[,<span class="dv">29</span>]<span class="sc">+</span><span class="fu">cbind</span>(<span class="at">channelFP1=</span><span class="dv">0</span>,dataCoeff<span class="sc">$</span>coeffWithin[,<span class="dv">30</span><span class="sc">:</span><span class="dv">56</span>])</span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="fu">colnames</span>(Y)<span class="ot">=</span><span class="fu">gsub</span>(<span class="st">":conditionScrambledFaces"</span>,<span class="st">""</span>,<span class="fu">colnames</span>(Y))</span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="fu">colnames</span>(Y)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code> [1] "channelFP1" "channelF7"  "channelF3"  "channelFC3" "channelFz" 
+ [6] "channelFCz" "channelFP2" "channelF8"  "channelF4"  "channelFC4"
+[11] "channelC3"  "channelC5"  "channelCz"  "channelCPz" "channelC4" 
+[16] "channelC6"  "channelP3"  "channelP7"  "channelPz"  "channelP4" 
+[21] "channelP8"  "channelPO7" "channelPO3" "channelO1"  "channelPO8"
+[26] "channelPO4" "channelO2"  "channelOz" </code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb14"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" aria-hidden="true" tabindex="-1"></a>res<span class="ot">=</span><span class="fu">flip</span>(Y,<span class="at">perms=</span><span class="dv">10000</span>)</span>
+<span id="cb14-2"><a href="#cb14-2" aria-hidden="true" tabindex="-1"></a>res<span class="ot">=</span><span class="fu">flip.adjust</span>(res)</span>
+<span id="cb14-3"><a href="#cb14-3" aria-hidden="true" tabindex="-1"></a><span class="fu">summary</span>(res)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code> Call:
+ flip(Y = Y, perms = 10000) 
+9999 permutations.
+
+           Test   Stat tail p-value Adjust:maxT sig.
+channelFP1    t -6.650   &gt;&lt;  0.0002      0.0002  ***
+channelF7     t -4.192   &gt;&lt;  0.0002      0.0006  ***
+channelF3     t -4.061   &gt;&lt;  0.0004      0.0006  ***
+channelFC3    t -3.393   &gt;&lt;  0.0002      0.0036   **
+channelFz     t -7.126   &gt;&lt;  0.0002      0.0002  ***
+channelFCz    t -6.458   &gt;&lt;  0.0002      0.0002  ***
+channelFP2    t -4.953   &gt;&lt;  0.0002      0.0002  ***
+channelF8     t -4.696   &gt;&lt;  0.0002      0.0002  ***
+channelF4     t -4.955   &gt;&lt;  0.0002      0.0002  ***
+channelFC4    t -6.271   &gt;&lt;  0.0002      0.0002  ***
+channelC3     t -4.719   &gt;&lt;  0.0002      0.0002  ***
+channelC5     t -1.628   &gt;&lt;  0.1128      0.2098     
+channelCz     t -5.019   &gt;&lt;  0.0002      0.0002  ***
+channelCPz    t -5.017   &gt;&lt;  0.0002      0.0002  ***
+channelC4     t -4.534   &gt;&lt;  0.0002      0.0002  ***
+channelC6     t -4.037   &gt;&lt;  0.0002      0.0006  ***
+channelP3     t  2.580   &gt;&lt;  0.0094      0.0318    *
+channelP7     t  7.987   &gt;&lt;  0.0002      0.0002  ***
+channelPz     t -0.757   &gt;&lt;  0.4614      0.4614     
+channelP4     t  3.228   &gt;&lt;  0.0010      0.0054   **
+channelP8     t  7.618   &gt;&lt;  0.0002      0.0002  ***
+channelPO7    t  7.737   &gt;&lt;  0.0002      0.0002  ***
+channelPO3    t  3.660   &gt;&lt;  0.0004      0.0020   **
+channelO1     t  3.644   &gt;&lt;  0.0004      0.0020   **
+channelPO8    t  6.915   &gt;&lt;  0.0002      0.0002  ***
+channelPO4    t  4.392   &gt;&lt;  0.0002      0.0004  ***
+channelO2     t  4.248   &gt;&lt;  0.0002      0.0006  ***
+channelOz     t  3.130   &gt;&lt;  0.0010      0.0070   **</code></pre>
+</div>
+<div class="sourceCode cell-code" id="cb16"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" aria-hidden="true" tabindex="-1"></a><span class="co"># get the a z value from the adjusted p-value for each channel, just for visual purposes:</span></span>
+<span id="cb16-2"><a href="#cb16-2" aria-hidden="true" tabindex="-1"></a>pvals<span class="ot">=</span><span class="fu">getFlip</span>(res,<span class="st">"Adjust:maxT"</span>)</span>
+<span id="cb16-3"><a href="#cb16-3" aria-hidden="true" tabindex="-1"></a><span class="fu">rownames</span>(pvals)<span class="ot">=</span><span class="fu">gsub</span>(<span class="st">"channel"</span>,<span class="st">""</span>,<span class="fu">rownames</span>(pvals))</span>
+<span id="cb16-4"><a href="#cb16-4" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-5"><a href="#cb16-5" aria-hidden="true" tabindex="-1"></a><span class="co"># match to eeg coordinates</span></span>
+<span id="cb16-6"><a href="#cb16-6" aria-hidden="true" tabindex="-1"></a><span class="fu">data</span>(<span class="st">"eegcoord"</span>)</span>
+<span id="cb16-7"><a href="#cb16-7" aria-hidden="true" tabindex="-1"></a>cidx <span class="ot">&lt;-</span> <span class="fu">match</span>(<span class="fu">rownames</span>(pvals),<span class="fu">rownames</span>(eegcoord))</span>
+<span id="cb16-8"><a href="#cb16-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb16-9"><a href="#cb16-9" aria-hidden="true" tabindex="-1"></a><span class="co"># plot t-stat in 2d</span></span>
+<span id="cb16-10"><a href="#cb16-10" aria-hidden="true" tabindex="-1"></a><span class="fu">eegspace</span>(eegcoord[cidx,<span class="dv">4</span><span class="sc">:</span><span class="dv">5</span>],<span class="sc">-</span><span class="fu">log10</span>(pvals[,<span class="dv">1</span>]),<span class="at">cex.point =</span> <span class="dv">3</span>,<span class="at">colorlab=</span><span class="st">"-log10(adj-p)"</span>,<span class="at">mycolors=</span><span class="fu">heat.colors</span>(<span class="dv">4</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output-display">
+<div>
+<figure class="figure">
+<p><img src="progettotest_files/figure-html/unnamed-chunk-10-1.png" class="img-fluid figure-img" width="672"></p>
 </figure>
 </div>
 </div>
