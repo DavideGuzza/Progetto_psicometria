@@ -192,9 +192,30 @@ print(p)
 ```{r}
 #| echo: false
 
+dati_avg <- dati %>%
+  filter(time >= 150, time <= 190) %>%
+  group_by(id, channel, condition) %>%
+  summarize(mean_amp = mean(value), .groups = "drop")
+dati_wide <- dati_avg %>%
+  pivot_wider(names_from = condition, values_from = mean_amp)
+t_results <- dati_wide %>%
+  group_by(channel) %>%
+  summarize(
+    t_stat  = t.test(Faces, ScrambledFaces, paired = TRUE)$statistic,
+    p_value = t.test(Faces, ScrambledFaces, paired = TRUE)$p.value,
+    .groups = "drop"
+  ) %>%
+  mutate(p_adj = p.adjust(p_value, method = "fdr")) %>% 
+  mutate(significance = case_when(
+    p_adj < 0.001 ~ "***",
+    p_adj < 0.01  ~ "**",
+    p_adj < 0.05  ~ "*",
+    TRUE            ~ "ns"
+  ))
+t_results %>% filter(p_adj < 0.05)
 # Eseguire test t per campioni appaiati su ciascun elettrodo
 test_t_paired <- dati %>%
-  filter(time >= 150, time <= 190, channel %in% electrode_order) %>% 
+  filter(time >= 150, time <= 190) %>% 
   group_by(channel) %>%
   summarise(p_value = t.test(value ~ condition, data = .)$p.value)
 
@@ -211,6 +232,92 @@ test_t_paired <- test_t_paired %>%
 print(test_t_paired)
 
 ```
+
+
+```{r}
+# 1. Average over time for each subject, channel & condition
+subject_avg <- dati %>%
+  group_by(id, channel, condition) %>%
+  summarise(mean_value = mean(value), .groups = "drop")
+
+# 2. Pivot so that you have one column for Faces and one for ScrambledFaces
+wide_avg <- subject_avg %>%
+  pivot_wider(
+    names_from  = condition,
+    values_from = mean_value
+  )
+#  wide_avg now has columns: id, channel, Faces, ScrambledFaces
+
+# 3. Compute the difference (Faces − ScrambledFaces) for each subject/channel
+diff_df <- wide_avg %>%
+  mutate(diff = Faces - ScrambledFaces) %>%
+  select(id, channel, diff)
+
+# 4. Pivot so that each channel is its own column, rows = subjects
+diff_mat <- diff_df %>%
+  pivot_wider(
+    names_from  = channel,
+    values_from = diff
+  ) %>%
+  column_to_rownames("id") %>%      # make the subject IDs the row names
+  as.matrix()
+
+# 5. Run one t‑test per channel (i.e. per column of diff_mat)
+test_list <- lapply(
+  X      = as.data.frame(diff_mat),   # each column is one channel
+  FUN    = t.test
+)
+
+# 6. (Optional) Extract test statistics and p‑values into a table
+results <- data.frame(
+  t_stat    = sapply(test_list, function(x) x$statistic),
+  p_value   = sapply(test_list, function(x) x$p.value)
+  
+) %>%
+  mutate(p_adj_bonf = p.adjust(p_value, method = "bonferroni")) %>% 
+  mutate(significance = case_when(
+    p_adj_bonf < 0.001 ~ "***",
+    p_adj_bonf < 0.01  ~ "**",
+    p_adj_bonf < 0.05  ~ "*",
+    TRUE            ~ ""
+  ))
+row.names(results)<-gsub(".t", "", row.names(results))
+print(results)
+# 1. Extract the t‑statistic for each channel
+t_chan <- sapply(test_list, function(ch) ch$statistic)
+
+# (Optional) clean up the names if needed
+# e.g. remove any “diff_mat$” prefix that might have crept in:
+names(t_chan) <- gsub(".t", "", names(t_chan))
+
+# 2. Load your EEG coordinate lookup
+# Depending on the package you’re using, you might need:
+# install.packages("eegkitdata"); library(eegkitdata)
+# or
+# install.packages("eegUtils");  library(eegUtils)
+# but in many pipelines simply:
+data(eegcoord)
+
+# 3. Match the channels in your t‑vector to rows in eegcoord
+cidx <- match(toupper(names(t_chan)), toupper(rownames(eegcoord)))
+
+# 4. Plot in 2D
+#
+#    eegspace(xy, values, ...)
+#      xy      : a two‑column matrix of electrode coords (e.g. columns 4 & 5)
+#      values  : the vector of t‑stats
+#      cex.point, colorlab, mycolors : your aesthetics
+#
+eegspace(
+  eegcoord[cidx, 4:5],  # use columns 4 (x) & 5 (y)
+  t_chan,               # your per‑channel t‑stats
+  cex.point = 3,
+  colorlab  = "t-statistic",
+  mycolors  = heat.colors(4)
+)
+
+```
+
 
 Osservando la Figura 1 e i risultati del test t per campioni appaiati, si può notare che le differenze tra le condizioni Faces e ScrambledFaces sono altamente significative per tutti gli elettrodi analizzati, il che dimostra che i soggetti elaborano in modo distinto le facce e le facce scambled.. Si è applicato al test t la correzione False Discovery Rate per gestire il problema dei confronti multipli, confermando che le differenze osservate non siano dovute a fluttuazioni casuali.
 
